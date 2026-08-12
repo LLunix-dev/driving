@@ -8,11 +8,13 @@ import parkingLotTexture from "./assets/parking_lot.png";
 import { positions } from './car';
 
 console.log(vertexShaderSource);
-var canvas = document.getElementById('my_Canvas');
+let canvas = document.getElementById('my_Canvas');
 const gl = canvas.getContext('webgl2');
 let model = mat4.create();
 let view = mat4.create();
 let projection = mat4.create();
+
+let accelDiv = document.getElementById("accel");
 
 
 if(!gl) {
@@ -203,7 +205,7 @@ carObject.position = [0,0.4,0.5];
 
 let mapMesh = new Mesh(gl,map,false, groundVertexSource, groundFragmentSource, parkingLotTexture);
 let mapObject = new Object3d(mapMesh);
-mapObject.scale = [38.4 * 2,0.1, 21.6 * 2];
+mapObject.scale = [38.4 * 3,0.5, 21.6 * 3];
 mapObject.position = [0,-1,0]
 
 let objects = [
@@ -211,40 +213,119 @@ let objects = [
     mapObject
 ];
 
+let car_angle = 0;
+let speed = 0.1;
+
 let isDragging = false;
 let dx = 0;
 let dy = 0;
-let angle = 0
+let angle = 0;
 let pitch= 0;
 doMouseMovement();
 let fps = 0;
 let frameCount = 0;
 let lastFpsUpdate = performance.now();
+let vx = 0;
+let vz = 0;
+let avx =0;
+let avz =0
+let steering = 0;
+let lastTime = 0;
+let friction = 0.999;
+let acceleration = 0;
+
+let keys = {};
+
 function draw(time){
 
         frameCount++;
+
+    let dt = (time - lastTime) / 1000;
+    lastTime = time;
 
     if (time - lastFpsUpdate >= 1000) {
         fps = frameCount;
         frameCount = 0;
         lastFpsUpdate = time;
     }
-    console.log(fps);
+    //console.log(fps);
     
     canvas.height = window.innerHeight;
     canvas.width = window.innerWidth;
+    accelDiv.textContent = `acceleration: ${acceleration}`;
+    
     //mat4.identity(model);
     //mat4.translate(model, model, [0,0,-3]);
     //
     //mat4.rotateX(model, model, time * 0.0001);
     //mat4.rotateY(model, model, time * 0.001);
     
+    
+    //let vectoryLenght = Math.sqrt(vx * vx + vz * vz);
+
+    if(keys["d"]) steering = Math.min(steering + 0.01, 1);
+    if(keys["a"]) steering = Math.max(steering - 0.01, -1);
+
+    
+    let forwardX = Math.cos(car_angle);
+    let forwardZ = Math.sin(car_angle);
+    
+    let rightX = -Math.sin(car_angle);
+    let rightZ = Math.cos(car_angle);
+    
+    
+    
+    
+    
+    let forwardSpeed = 
+    vx * forwardX+
+    vz * forwardZ;
+    
+    let lateralSpeed = 
+    vx * rightX +
+    vz * rightZ;
+    
+    forwardSpeed += acceleration * dt;
+
+    let maxRadius = (forwardSpeed * forwardSpeed) / (4 * 9.81);
+
+    let maxRadians = Math.atan(2.5 / maxRadius);
+
+    car_angle += steering * dt;
+    console.log(maxRadians);
+    forwardSpeed *= Math.pow(0.999, dt * 60);
+    if(Math.abs(steering) > maxRadians) {
+        console.log("true");
+        lateralSpeed *= Math.pow(0.99, dt * 60);
+        
+    }else{
+        lateralSpeed *= Math.pow(0.50, dt * 60);
+    }
+    
+    
+    vx = forwardX * forwardSpeed + rightX * lateralSpeed;
+    vz = forwardZ * forwardSpeed + rightZ * lateralSpeed
+
+
+    carObject.position[0] += vx * dt;
+    carObject.position[2] += vz * dt;
+
+    //speed *= Math.pow(friction, dt * 60);
+
+    let cameraAngle = angle + (-car_angle - Math.PI /2);
+
+
+    carObject.rotation[1] = -car_angle - Math.PI /2 ;
+
+    let cameraX =Math.sin(cameraAngle)* Math.cos(pitch)* 10 +carObject.position[0];
+    let cameraY = Math.sin(pitch) * 10;
+    let cameraZ = Math.cos(cameraAngle)* Math.cos(pitch) * 10 + carObject.position[2];
 
 
     mat4.lookAt(
         view,
-        [Math.sin(angle)* Math.cos(pitch)* 10,Math.sin(pitch) * 10,Math.cos(angle)* Math.cos(pitch) * 10],
-        [0,0,0],
+        [cameraX, cameraY,cameraZ],
+        carObject.position,
         [0,1,0]
     )
 
@@ -324,6 +405,40 @@ function doMouseMovement() {
         }
         
     })
-}
-requestAnimationFrame(draw);
+    window.addEventListener("keydown", (event) => {
 
+        keys[event.key] = true;
+    /*
+    if (event.key === "d") {
+        steering = Math.min(steering + 0.1, 1);
+    }
+
+    if (event.key === "a") {
+        steering = Math.max(steering - 0.1, -1);
+    }
+        */
+    })
+
+    window.addEventListener("keyup", (event) => {
+        /*
+        if(event.key == "a" || event.key == "d") {
+            steering = 0;
+        }
+
+        */
+       keys[event.key] = false;
+    });
+
+    window.addEventListener("keydown", (event) => {
+        if(event.key == "Shift") {
+            console.log(event.key)
+            acceleration += 1;
+        }
+        if(event.key == "Control") {
+            acceleration -= 1;
+        }
+    })
+}
+
+
+requestAnimationFrame(draw);
